@@ -204,18 +204,20 @@ int main(int argc, char *argv[])
     // printf("abc");
 
     // TODO: 完成登录
-    char username[32], passwd[256];
+    char username[32];
+    char *passwd;
 
     bzero(username, 32); // memset(username, 0, 32);
-    bzero(passwd, 256);  // memset(passwd, 0, 256);
+    // bzero(passwd, 256);  // memset(passwd, 0, 256);
     int loginID = 0;
     while (loginID == 0)
     {
         printf("请输入VPN服务器用户名：");
         scanf("%s", username);
         int name_len = strlen(username);
-        printf("\n请输入密码：");
-        scanf("%s", passwd);
+        // printf("\n请输入密码：");
+        // scanf("%s", passwd);
+        passwd = getpass("\n请输入密码：");
         int passwd_len = strlen(passwd);
         char loginBUFF[300];
         memset(loginBUFF, 0, 300);
