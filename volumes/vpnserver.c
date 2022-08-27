@@ -138,7 +138,11 @@ int main(int argc, char *argv[])
     SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
     // Step 2: Set up the server certificate and private key
     SSL_CTX_use_certificate_file(ctx, "./tls/cert_server/server.crt", SSL_FILETYPE_PEM);
-    SSL_CTX_use_PrivateKey_file(ctx, "./tls/cert_server/server.key", SSL_FILETYPE_PEM);
+    int passFlag = SSL_CTX_use_PrivateKey_file(ctx, "./tls/cert_server/server.key", SSL_FILETYPE_PEM);
+    if (passFlag)
+        printf("密码正确！\n");
+    else
+        printf("密码错误！\n");
     // Step 3: Create a new SSL structure for a connection
     ssl = SSL_new(ctx);
 
@@ -175,14 +179,14 @@ int main(int argc, char *argv[])
             socklen_t addrLen;
             struct sockaddr_in cliAddr;
             char addr_client[INET_ADDRSTRLEN]; // INET_ADDRSTRLEN这个宏系统默认定义 16
-            int port = ntohs(sa_client.sin_port);
+            // int port = ntohs(sa_client.sin_port);
             addrLen = sizeof(cliAddr);
             if (-1 == getpeername(sockfd, (struct sockaddr *)&cliAddr, &addrLen))
             {
                 return 1;
             }
             strncpy(addr_client, (const char *)inet_ntoa(cliAddr.sin_addr), 64);
-            port = (int)ntohs(cliAddr.sin_port);
+            int port = (int)ntohs(cliAddr.sin_port);
 
             // Login in Part !!!
             int loginflag = 0;
@@ -240,11 +244,13 @@ int main(int argc, char *argv[])
 
                 FD_ZERO(&readFDSet);
                 FD_SET(sockfd, &readFDSet);
-                // FD_SET(tunfd, &readFDSet);
+                FD_SET(tunfd, &readFDSet);
                 select(FD_SETSIZE, &readFDSet, NULL, NULL, NULL);
 
-                if (FD_ISSET(tunfd, &readFDSet)){
-                    tunSelected(tunfd, ssl);}
+                if (FD_ISSET(tunfd, &readFDSet))
+                {
+                    tunSelected(tunfd, ssl);
+                }
                 if (FD_ISSET(sockfd, &readFDSet))
                     socketSelected(tunfd, ssl);
             }
@@ -285,10 +291,23 @@ void tunSelected(int tunfd, SSL *ssl)
 
     bzero(buff, BUFF_SIZE);
     len = read(tunfd, buff, BUFF_SIZE);
+    int src_C = buff[14], src_D = buff[15];
+    int dst_C = buff[18], dst_D = buff[19];
+    if (dst_C != 53)
+    {
+        return;
+    }
+    if (dst_D != sessionID)
+    {
+        write(tunfd, buff, len);
+        return;
+    }
+
     // u_char srcIP[4];
-    // memcpy(srcIP, buff + 26, 4);
-    // printf("%s\n", (srcIP));
-    // sleep(0.01);
+    // memcpy(srcIP, buff + 12, 4);
+    // for (int i = 0; i < 40; ++i)
+    //     printf("%d %d\n", i, buff[i]);
+    sleep(0.01);
     // sendto(sockfd, buff, len, 0, (struct sockaddr *)&peerAddr, sizeof(peerAddr));
     SSL_write(ssl, buff, len);
 }
