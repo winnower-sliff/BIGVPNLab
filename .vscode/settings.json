@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.yml": "dockercompose",
+        "stdlib.h": "c",
+        "sstream": "c"
+    }
+}
