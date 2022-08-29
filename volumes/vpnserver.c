@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
         }
 
         // kill(getppid(), SIGUSR1);
-        if (fork() != 0)
+        if (pid != 0)
         { // The parent process
             // printf("close parent!\n");
             close(sockfd);
