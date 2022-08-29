@@ -56,7 +56,7 @@ int setupTCPServer();
 void processRequest(SSL *ssl, int sockfd);
 
 // Create Tun Device
-int createTunDevice();
+// int createTunDevice();
 
 // Init UDP Server
 // int initUDPServer();
@@ -95,12 +95,7 @@ void newSession(int signum)
 
 int main(int argc, char *argv[])
 {
-    int tunfd, sockfd;
-
-    tunfd = createTunDevice();
-    system("ip addr add 192.168.78.100/24 dev tun0");
-    system("ip link set dev tun0 up ");
-    system("ip route add 192.168.53.0/24 dev tun0 via 192.168.78.100");
+    int sockfd;
 
     SSL_METHOD *meth;
     SSL_CTX *ctx;
@@ -244,6 +239,31 @@ int main(int argc, char *argv[])
                 return -1;
             }
 
+            // 创建对应TUN接口
+            int tunfd;
+            // tunfd = createTunDevice();
+            char cmd1[40], cmd2[40], cmd3[30], cmd4[65];
+            sprintf(cmd1, "ip tuntap add dev tun%d mod tun", sessionID);
+            sprintf(cmd2, "ip addr add 192.168.78.%d/24 dev tun%d", sessionID, sessionID);
+            sprintf(cmd3, "ip link set dev tun%d up", sessionID);
+            sprintf(cmd4, "ip route add 192.168.53.%d/24 dev tun%d via 192.168.78.%d", sessionID, sessionID, sessionID);
+            system(cmd1);
+            system(cmd2);
+            system(cmd3);
+            system(cmd4);
+
+            if ((tunfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+            {
+                perror("socket");
+                exit(1);
+            }
+            struct ifreq interface;
+            strncpy(interface.ifr_ifrn.ifrn_name, "tun012", sizeof("tun012"));
+            if (setsockopt(tunfd, SOL_SOCKET, SO_BINDTODEVICE, (char *)&interface, sizeof(interface)) < 0)
+            {
+                perror("SO_BINDTODEVICE failed");
+            }
+
             //开始监听
             while (1)
             {
@@ -266,24 +286,29 @@ int main(int argc, char *argv[])
             SSL_free(ssl);
             close(sockfd);
 
+            // 删除对应接口
+            char cmd5[40];
+            sprintf(cmd5, "ip tuntap del dev tun%d mod tun", sessionID);
+            system(cmd5);
+
             return 0;
         }
     }
 }
 
-int createTunDevice()
-{
-    int tunfd;
-    struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
+// int createTunDevice()
+// {
+//     int tunfd;
+//     struct ifreq ifr;
+//     memset(&ifr, 0, sizeof(ifr));
 
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+//     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 
-    tunfd = open("/dev/net/tun", O_RDWR);
-    ioctl(tunfd, TUNSETIFF, &ifr);
+//     tunfd = open("/dev/net/tun", O_RDWR);
+//     ioctl(tunfd, TUNSETIFF, &ifr);
 
-    return tunfd;
-}
+//     return tunfd;
+// }
 
 void tunSelected(int tunfd, SSL *ssl)
 {
@@ -294,17 +319,17 @@ void tunSelected(int tunfd, SSL *ssl)
 
     bzero(buff, BUFF_SIZE);
     len = read(tunfd, buff, BUFF_SIZE);
-    int src_C = buff[14], src_D = buff[15];
-    int dst_C = buff[18], dst_D = buff[19];
-    if (dst_C != 53)
-    {
-        return;
-    }
-    if (dst_D != sessionID)
-    {
-        write(tunfd, buff, len);
-        return;
-    }
+    // int src_C = buff[14], src_D = buff[15];
+    // int dst_C = buff[18], dst_D = buff[19];
+    // if (dst_C != 53)
+    // {
+    //     return;
+    // }
+    // if (dst_D != sessionID)
+    // {
+    //     write(tunfd, buff, len);
+    //     return;
+    // }
 
     // u_char srcIP[4];
     // memcpy(srcIP, buff + 12, 4);
