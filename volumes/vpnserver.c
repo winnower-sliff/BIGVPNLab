@@ -147,34 +147,35 @@ int main(int argc, char *argv[])
     ssl = SSL_new(ctx);
 
     // 为会话生成对应ID
-    struct sigaction new_session;
-    new_session.sa_flags = 0;
-    new_session.sa_handler = newSession; //信号处理函数
+    sessionID %= 254;
+    sessionID++;
+    // struct sigaction new_session;
+    // new_session.sa_flags = 0;
+    // new_session.sa_handler = newSession; //信号处理函数
 
-    sigaction(SIGUSR1, &new_session, NULL);
+    // sigaction(SIGUSR1, &new_session, NULL);
 
     // SSL服务开启，等待客户端ssl连接
     while (1)
     {
         int sockfd = accept(listen_sock, (struct sockaddr_in *)&sa_client, &client_len);
         // 收到一个客户端的ssl请求，建立子进程
-        if (fork() == 0)
+        pid_t pid = fork();
+        if (pid = -1)
+        {
+            perror("fork");
+            exit(1);
+        }
+
+        // kill(getppid(), SIGUSR1);
+        if (fork() != 0)
+        { // The parent process
+            // printf("close parent!\n");
+            close(sockfd);
+        }
+        else
         { // The child process
             close(listen_sock);
-            // int reuse = 1;
-            // if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
-            // {
-            //     perror("setsockopet error\n");
-            //     return -1;
-            // }
-            SSL_set_fd(ssl, sockfd);
-            int err = SSL_accept(ssl);
-            CHK_SSL(err);
-            printf("SSL connection established!\n");
-            kill(getppid(), SIGUSR1);
-
-            // TODO: 完成登录
-
             /*通过已连接的sockfd获取客户端的ip和port*/
             socklen_t addrLen;
             struct sockaddr_in cliAddr;
@@ -188,7 +189,13 @@ int main(int argc, char *argv[])
             strncpy(addr_client, (const char *)inet_ntoa(cliAddr.sin_addr), 64);
             int port = (int)ntohs(cliAddr.sin_port);
 
-            // Login in Part !!!
+            // 建立TLS通信
+            SSL_set_fd(ssl, sockfd);
+            int err = SSL_accept(ssl);
+            CHK_SSL(err);
+            printf("SSL connection from %s : %d established!\n", addr_client, port);
+
+            // 客户端登录 !!!
             int loginflag = 0;
             while (loginflag < 1)
             {
@@ -226,6 +233,7 @@ int main(int argc, char *argv[])
                     SSL_write(ssl, answer, 2);
                 }
             }
+            // 登录成功
 
             printf("%s : %d 成功登录！当前会话ID：%d\n", addr_client, port, *psessionID);
 
@@ -259,11 +267,6 @@ int main(int argc, char *argv[])
             close(sockfd);
 
             return 0;
-        }
-        else
-        { // The parent process
-            // printf("close parent!\n");
-            close(sockfd);
         }
     }
 }
