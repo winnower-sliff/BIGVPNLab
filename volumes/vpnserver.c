@@ -22,6 +22,8 @@
 #include <crypt.h>
 #include <sys/types.h>
 #include <signal.h>
+#include <linux/if.h>
+#include <linux/if_tun.h>
 
 // check crt
 #define CHK_SSL(err)                 \
@@ -45,7 +47,7 @@ struct vpnserver
 };
 
 // 当前会话空余id
-int sessionID = 1;
+int sessionID = 0;
 int *psessionID = &sessionID;
 struct sockaddr_in peerAddr;
 
@@ -66,6 +68,9 @@ void tunSelected(int tunfd, SSL *sockfd);
 
 // Got a packet from the client tunnel
 void socketSelected(int tunfd, SSL *sockfd);
+
+// New!!!初始化TUN(修改源码以改变功能)
+int tun_alloc(char dev[IFNAMSIZ]); // dev数组用于存储设备的名称
 
 int login(char *user, char *passwd)
 {
@@ -141,9 +146,6 @@ int main(int argc, char *argv[])
     // Step 3: Create a new SSL structure for a connection
     ssl = SSL_new(ctx);
 
-    // 为会话生成对应ID
-    sessionID %= 254;
-    sessionID++;
     // struct sigaction new_session;
     // new_session.sa_flags = 0;
     // new_session.sa_handler = newSession; //信号处理函数
@@ -155,21 +157,26 @@ int main(int argc, char *argv[])
     {
         int sockfd = accept(listen_sock, (struct sockaddr_in *)&sa_client, &client_len);
         // 收到一个客户端的ssl请求，建立子进程
-        pid_t pid = fork();
-        if (pid = -1)
-        {
-            perror("fork");
-            exit(1);
-        }
+        // pid_t pid;
+        // pid = fork();
+        // if (pid = -1)
+        // {
+        //     perror("fork");
+        //     exit(1);
+        // }
+
+        // 为会话生成对应ID
+        sessionID %= 127;
+        sessionID++;
 
         // kill(getppid(), SIGUSR1);
-        if (pid != 0)
+        if (fork() > 0)
         { // The parent process
             // printf("close parent!\n");
             close(sockfd);
         }
-        else
-        { // The child process
+        else // if (pid == 0)
+        {    // The child process
             close(listen_sock);
             /*通过已连接的sockfd获取客户端的ip和port*/
             socklen_t addrLen;
@@ -241,28 +248,32 @@ int main(int argc, char *argv[])
 
             // 创建对应TUN接口
             int tunfd;
+            char tunName[10];
+            sprintf(tunName, "tun%d", sessionID);
             // tunfd = createTunDevice();
-            char cmd1[40], cmd2[40], cmd3[30], cmd4[65];
-            sprintf(cmd1, "ip tuntap add dev tun%d mod tun", sessionID);
-            sprintf(cmd2, "ip addr add 192.168.78.%d/24 dev tun%d", sessionID, sessionID);
-            sprintf(cmd3, "ip link set dev tun%d up", sessionID);
-            sprintf(cmd4, "ip route add 192.168.53.%d/24 dev tun%d via 192.168.78.%d", sessionID, sessionID, sessionID);
+            char cmd1[40], cmd2[45], cmd3[30], cmd4[65];
+            // sprintf(cmd1, "ip tuntap add dev %s mod tun", tunName);
+            tunfd = tun_alloc(tunName);
+            sprintf(cmd2, "ip addr add 192.168.53.%d/24 dev %s", sessionID + 128, tunName);
+            sprintf(cmd3, "ip link set dev %s up", tunName);
+            sprintf(cmd4, "ip route add 192.168.53.%d dev %s via 192.168.53.%d", sessionID, tunName, sessionID + 128);
             system(cmd1);
             system(cmd2);
             system(cmd3);
             system(cmd4);
+            // printf("%s\n%s\n%s\n%s\n", cmd1, cmd2, cmd3, cmd4);
 
-            if ((tunfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-            {
-                perror("socket");
-                exit(1);
-            }
-            struct ifreq interface;
-            strncpy(interface.ifr_ifrn.ifrn_name, "tun012", sizeof("tun012"));
-            if (setsockopt(tunfd, SOL_SOCKET, SO_BINDTODEVICE, (char *)&interface, sizeof(interface)) < 0)
-            {
-                perror("SO_BINDTODEVICE failed");
-            }
+            // if ((tunfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+            // {
+            //     perror("socket");
+            //     exit(1);
+            // }
+            // struct ifreq interface;
+            // strncpy(interface.ifr_ifrn.ifrn_name, tunName, sizeof(tunName));
+            // if (setsockopt(tunfd, SOL_SOCKET, SO_BINDTODEVICE, (char *)&interface, sizeof(interface)) < 0)
+            // {
+            //     perror("SO_BINDTODEVICE failed");
+            // }
 
             //开始监听
             while (1)
@@ -285,11 +296,6 @@ int main(int argc, char *argv[])
             SSL_shutdown(ssl);
             SSL_free(ssl);
             close(sockfd);
-
-            // 删除对应接口
-            char cmd5[40];
-            sprintf(cmd5, "ip tuntap del dev tun%d mod tun", sessionID);
-            system(cmd5);
 
             return 0;
         }
@@ -345,7 +351,12 @@ void socketSelected(int tunfd, SSL *ssl)
     int len;
     char buff[BUFF_SIZE];
 
-    printf("Server: Got a packet from tunnel, sessionID: %d\n", *psessionID);
+    time_t timep;
+    struct tm *p;
+    time(&timep);
+    p = gmtime(&timep);
+
+    printf("Server: %d:%d:%d Packet from tunnel, sessionID: %d\n", (8 + p->tm_hour) % 24, p->tm_min, p->tm_sec, sessionID);
 
     bzero(buff, BUFF_SIZE);
     // len = recvfrom(sockfd, buff, BUFF_SIZE, 0, NULL, NULL);
@@ -353,9 +364,17 @@ void socketSelected(int tunfd, SSL *ssl)
     // printf("sock_len: %d", len);
     if (len == 0)
     {
-        printf("检测到退出，会话ID：%d退出登录...\n", *psessionID);
+        printf("检测到退出,会话ID：%d退出登录...\n", *psessionID);
         SSL_shutdown(ssl);
         SSL_free(ssl);
+
+        // 删除对应接口
+        char cmd5[40];
+        sprintf(cmd5, "ip tuntap del dev tun%d mod tun", sessionID);
+        system(cmd5);
+        printf("tun%d has been deleted!!!\n", sessionID);
+
+        exit(0);
     }
     write(tunfd, buff, len);
 }
@@ -377,4 +396,41 @@ int setupTCPServer()
     err = listen(listen_sock, 5);
     CHK_ERR(err, "listen");
     return listen_sock;
+}
+
+int tun_alloc(char dev[IFNAMSIZ]) // dev数组用于存储设备的名称
+{
+    struct ifreq ifr;
+    int fd, err;
+
+    if ((fd = open("/dev/net/tun", O_RDWR)) < 0)
+    { // 打开文件
+        perror("open");
+        return -1;
+    }
+
+    bzero(&ifr, sizeof(ifr));
+
+    /* Flags : IFF_TUN   - TUN设备
+     *         IFF_TAP   - TAP设备
+     *         IFF_NO_PI - 不需要提供包的信息
+     */
+
+    ifr.ifr_flags = IFF_TUN | IFF_NO_PI; // tun设备不包含以太网头部,而tap包含,仅此而已
+
+    if (*dev)
+    {
+        strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+    }
+
+    if ((err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0)
+    { // 打开设备
+        perror("ioctl TUNSETIFF");
+        close(fd);
+        return err;
+    }
+    // 一旦设备开启成功，系统会给设备分配一个名称对于tun设备，一般为tunX，X为从0开始的编号，对于tap设备
+    // 一般为tapX,X为从0开始的编号
+    strcpy(dev, ifr.ifr_name); // 拷贝设备的名称至dev中
+    return fd;
 }
