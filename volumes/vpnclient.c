@@ -223,7 +223,11 @@ int main(int argc, char *argv[])
         memset(loginBUFF, 0, 300);
         strcpy(loginBUFF, username);
         strcpy(loginBUFF + 40, passwd);
-        printf("Username: %s\tPassword: %s\t", loginBUFF, loginBUFF + 40);
+        for (int i = 0; i < passwd_len; ++i)
+        {
+            passwd[i] = '*';
+        }
+        printf("Username: %s\t", loginBUFF);
 
         SSL_write(ssl, loginBUFF, 300);
         fd_set readFDSet;
