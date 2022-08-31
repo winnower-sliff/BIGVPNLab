@@ -223,7 +223,11 @@ int main(int argc, char *argv[])
         memset(loginBUFF, 0, 300);
         strcpy(loginBUFF, username);
         strcpy(loginBUFF + 40, passwd);
-        printf("Username: %s\tPassword: %s\t", loginBUFF, loginBUFF + 40);
+        for (int i = 0; i < passwd_len; ++i)
+        {
+            passwd[i] = '*';
+        }
+        printf("Username: %s\t", loginBUFF);
 
         SSL_write(ssl, loginBUFF, 300);
         fd_set readFDSet;
@@ -273,9 +277,9 @@ int main(int argc, char *argv[])
     char cmd2[60] = "ip route add 192.168.60.0/24 dev tun0 via ";
     strcat(cmd2, netID);
     system(cmd2);
-    char cmd3[60] = "ip route add 192.168.78.0/24 dev tun0 via ";
-    strcat(cmd3, netID);
-    system(cmd3);
+    // char cmd3[60] = "ip route add 192.168.78.0/24 dev tun0 via ";
+    // strcat(cmd3, netID);
+    // system(cmd3);
     // Enter the main loop
     while (1)
     {
