@@ -277,9 +277,9 @@ int main(int argc, char *argv[])
     char cmd2[60] = "ip route add 192.168.60.0/24 dev tun0 via ";
     strcat(cmd2, netID);
     system(cmd2);
-    char cmd3[60] = "ip route add 192.168.78.0/24 dev tun0 via ";
-    strcat(cmd3, netID);
-    system(cmd3);
+    // char cmd3[60] = "ip route add 192.168.78.0/24 dev tun0 via ";
+    // strcat(cmd3, netID);
+    // system(cmd3);
     // Enter the main loop
     while (1)
     {
